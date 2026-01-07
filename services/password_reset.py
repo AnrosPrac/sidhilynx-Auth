@@ -1,21 +1,21 @@
 from datetime import datetime
 import asyncio
 
-from auth.services.email_services import send_password_reset_otp
-from auth.db.user_repo import (
+from services.email_services import send_password_reset_otp
+from db.user_repo import (
     get_user_by_email,
     get_user_by_sidhi_id,
     set_reset_otp,
     increment_otp_attempts,
     clear_reset_otp
 )
-from auth.ustils.otp import (
+from ustils.otp import (
     generate_otp,
     hash_otp,
     otp_expiry_time,
     MAX_OTP_ATTEMPTS
 )
-from auth.ustils.security import hash_password
+from ustils.security import hash_password
 from core.database import db
 
 

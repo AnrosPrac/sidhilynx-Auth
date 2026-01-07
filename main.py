@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from auth.api.v1.users import router as auth_router
+from api.v1.users import router as auth_router
 
 app = FastAPI(title="CLG Project")
 

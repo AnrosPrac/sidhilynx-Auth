@@ -1,14 +1,14 @@
 from datetime import datetime, timedelta
-from auth.db.user_repo import (
+from db.user_repo import (
     get_user_by_email,
     get_user_by_sidhi_id,
     create_user
 )
-from auth.models.users import UserRegister, UserLogin
-from auth.ustils.security import hash_password, verify_password
-from auth.ustils.id_generator import generate_user_id
-from auth.auth_utils import create_access_token
-from auth.services.token_service import issue_tokens
+from models.users import UserRegister, UserLogin
+from ustils.security import hash_password, verify_password
+from ustils.id_generator import generate_user_id
+from auth_utils import create_access_token
+from services.token_service import issue_tokens
 
 
 import re

@@ -1,7 +1,7 @@
 import hashlib
 from datetime import datetime, timedelta
-from auth.auth_utils import create_access_token
-from auth.db.token_repo import save_refresh_token, get_refresh_token, delete_refresh_token
+from auth_utils import create_access_token
+from db.token_repo import save_refresh_token, get_refresh_token, delete_refresh_token
 
 REFRESH_TOKEN_DAYS = 30
 
