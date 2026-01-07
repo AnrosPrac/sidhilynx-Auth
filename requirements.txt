@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+motor
+python-dotenv
+pydantic[email]
+passlib[argon2]
+python-jose
+sib-api-v3-sdk
