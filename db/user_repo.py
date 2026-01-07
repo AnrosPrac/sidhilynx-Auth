@@ -1,4 +1,4 @@
-from core.database import db
+from database import db
 
 async def get_user_by_email(email: str):
     return await db.users.find_one({"email": email})
@@ -13,7 +13,7 @@ async def get_user_by_sidhi_id(sidhi_id: str):
     return await db.users.find_one({"sidhi_id": sidhi_id})
 
 
-from core.database import db
+from database import db
 from datetime import datetime
 
 async def set_reset_otp(user_id: str, otp_hash: str, expires_at: datetime):

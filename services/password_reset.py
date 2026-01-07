@@ -16,7 +16,7 @@ from ustils.otp import (
     MAX_OTP_ATTEMPTS
 )
 from ustils.security import hash_password
-from core.database import db
+from auth.database import db
 
 
 class PasswordResetError(Exception):

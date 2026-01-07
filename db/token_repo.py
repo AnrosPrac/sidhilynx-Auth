@@ -1,4 +1,4 @@
-from core.database import db
+from database import db
 from datetime import datetime
 
 async def save_refresh_token(user_id: str, token_hash: str, expires_at: datetime):
