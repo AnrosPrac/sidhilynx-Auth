@@ -6,3 +6,4 @@ pydantic[email]
 passlib[argon2]
 python-jose
 sib-api-v3-sdk
+pynacl

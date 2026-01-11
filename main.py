@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from api.v1.users import router as auth_router
+from api.v1.admin_clients import router as admin_clients_router
+
+
 
 app = FastAPI(title="CLG Project")
 
@@ -13,6 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(admin_clients_router)
 
 app.include_router(
     auth_router,
