@@ -68,11 +68,12 @@ async def register_user(data: UserRegister):
 
 
 # =========================
-# LOGIN (CLIENT-AWARE)
+# LOGIN (CLIENT-AWARE + CRYPTO)
 # =========================
 async def login_user(
     data: UserLogin,
     client_id: str,
+    public_key: str,        # 🔥 REQUIRED
     platform: str,
     app_id: str,
     app_name: str,
@@ -91,10 +92,11 @@ async def login_user(
     client = await get_client_by_id(client_id)
 
     if not client:
-        # First time seeing this client_id → register it
+        # First time seeing this client → register it
         await create_client(
             client_id=client_id,
             user_id=user["user_id"],
+            public_key=public_key,     # 🔥 STORE PUBLIC KEY
             platform=platform,
             app_id=app_id,
             app_name=app_name,
@@ -102,7 +104,7 @@ async def login_user(
             ip_address=ip_address
         )
     else:
-        # Existing client_id checks
+        # Existing client checks
         if client["user_id"] != user["user_id"]:
             raise AuthError("This device is already linked to another account")
 
@@ -111,7 +113,7 @@ async def login_user(
 
         await update_client_activity(client_id, ip_address)
 
-    # 3️⃣ Issue CLIENT-BOUND tokens
+    # 3️⃣ Issue client-bound tokens
     tokens = await issue_tokens(
         user_id=user["user_id"],
         client_id=client_id,
