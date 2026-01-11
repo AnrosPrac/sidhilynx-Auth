@@ -54,7 +54,6 @@ async def register(
 
 
 # ---------- LOGIN (CLIENT IDENTITY WIRED) ----------
-
 @router.post("/login")
 async def login(
     data: LoginReq,
@@ -75,10 +74,7 @@ async def login(
         # 1️⃣ Reject replayed / stale requests (60s window)
         now = time.time()
         if abs(now - float(x_client_timestamp)) > 60:
-            raise HTTPException(
-                status_code=401,
-                detail="Stale login request"
-            )
+            raise HTTPException(status_code=401, detail="Stale login request")
 
         # 2️⃣ Verify client signature
         message = f"{x_client_timestamp}:{data.sidhi_id}".encode()
@@ -88,18 +84,16 @@ async def login(
             message=message,
             signature_hex=x_client_signature
         ):
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid client signature"
-            )
+            raise HTTPException(status_code=401, detail="Invalid client signature")
 
         # 3️⃣ Derive client_id (SERVER-TRUSTED)
         client_id = derive_client_id(bytes.fromhex(x_client_public_key))
 
-        # 4️⃣ Continue normal login (client-bound)
+        # 4️⃣ Login (PASS PUBLIC KEY ✅)
         return await login_user(
             data=data,
             client_id=client_id,
+            public_key=x_client_public_key,   # 🔥 THIS WAS MISSING
             platform=x_platform,
             app_id=x_app_id,
             app_name=x_app_name,
