@@ -8,6 +8,7 @@ from services.password_reset import (
     reset_password,
     PasswordResetError
 )
+from services.auth_services import register_user, verify_registration_otp, login_user, AuthError
 from security.client_crypto import derive_client_id, verify_signature
 import time
 
@@ -157,7 +158,19 @@ async def refresh_token(
         "token_type": "bearer"
     }
 
+# Add this model with the other models at the top
+class VerifyRegistrationReq(BaseModel):
+    email: EmailStr
+    otp: str
 
+
+# Add this new endpoint after the /register endpoint
+@router.post("/verify-registration")
+async def verify_registration(data: VerifyRegistrationReq):
+    try:
+        return await verify_registration_otp(data.email, data.otp)
+    except AuthError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 # ---------- FORGOT PASSWORD ----------
 @router.post("/forgot-password")
 async def forgot_password(data: ForgotPasswordReq):
