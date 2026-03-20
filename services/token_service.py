@@ -27,7 +27,7 @@ async def issue_tokens(
         "cid": client_id,      # 🔒 BIND TO CLIENT
         "scope": scopes
     },
-    expires_delta=timedelta(minutes=30)
+    expires_delta=timedelta(minutes=300)
 )
 
 
@@ -76,5 +76,5 @@ async def refresh_access_token(
             "sub": record["user_id"],
             "scope": ["default"]
         },
-        expires_delta=timedelta(minutes=15)
+        expires_delta=timedelta(minutes=300)
     )
