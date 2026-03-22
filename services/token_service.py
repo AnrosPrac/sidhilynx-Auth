@@ -72,9 +72,10 @@ async def refresh_access_token(
     # Optional: rotate refresh token later (not now)
 
     return create_access_token(
-        data={
-            "sub": record["user_id"],
-            "scope": ["default"]
-        },
-        expires_delta=timedelta(minutes=300)
-    )
+    data={
+        "sub": record["user_id"],
+        "cid": client_id,
+        "scope": record.get("scope", ["default"])
+    },
+    expires_delta=timedelta(minutes=300)
+)
