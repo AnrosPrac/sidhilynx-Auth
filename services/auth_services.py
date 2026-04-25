@@ -235,8 +235,8 @@ async def login_google_user(
             await create_user(user_data)
             user = user_data
             
-    except ValueError:
-        raise AuthError("Invalid Google token")
+    except ValueError as e:
+        raise AuthError(f"Invalid Google token: {str(e)}")
 
     # 3️⃣ Client registry enforcement
     client = await get_client_by_id(client_id)
