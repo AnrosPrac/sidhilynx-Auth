@@ -1,18 +1,12 @@
 from fastapi import APIRouter, HTTPException, Header, Request
 from pydantic import BaseModel, EmailStr
 import os
-
-from services.auth_services import register_user, login_user, AuthError
-from services.password_reset import (
-    request_password_reset,
-    reset_password,
-    PasswordResetError
-)
-from services.auth_services import register_user, verify_registration_otp, login_user, AuthError
-from security.client_crypto import derive_client_id, verify_signature
 import time
 
+from services.auth_services import register_user, verify_registration_otp, login_user, login_google_user, AuthError
+from services.password_reset import request_password_reset, reset_password, PasswordResetError
 from services.token_service import refresh_access_token
+from security.client_crypto import derive_client_id, verify_signature
 
 router = APIRouter()
 
@@ -23,15 +17,19 @@ class RegisterReq(BaseModel):
     email: EmailStr
     password: str
 
+class VerifyRegistrationReq(BaseModel):
+    email: EmailStr
+    otp: str
 
 class LoginReq(BaseModel):
     sidhi_id: str
     password: str
 
+class GoogleLoginReq(BaseModel):
+    google_token: str
 
 class ForgotPasswordReq(BaseModel):
     identifier: str
-
 
 class ResetPasswordReq(BaseModel):
     identifier: str
@@ -54,32 +52,34 @@ async def register(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# ---------- LOGIN (CLIENT IDENTITY WIRED) ----------
+# ---------- VERIFY REGISTRATION OTP ----------
+@router.post("/verify-registration")
+async def verify_registration(data: VerifyRegistrationReq):
+    try:
+        return await verify_registration_otp(data.email, data.otp)
+    except AuthError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------- LOGIN ----------
 @router.post("/login")
 async def login(
     data: LoginReq,
     request: Request,
-
-    # 🔐 CRYPTO CLIENT IDENTITY
     x_client_public_key: str = Header(...),
     x_client_signature: str = Header(...),
     x_client_timestamp: str = Header(...),
-
-    # 📦 APP METADATA
     x_platform: str = Header(...),
     x_app_id: str = Header(...),
     x_app_name: str = Header(...),
     x_app_version: str = Header(...)
 ):
     try:
-        # 1️⃣ Reject replayed / stale requests (60s window)
         now = time.time()
         if abs(now - float(x_client_timestamp)) > 60:
             raise HTTPException(status_code=401, detail="Stale login request")
 
-        # 2️⃣ Verify client signature
         message = f"{x_client_timestamp}:{data.sidhi_id}".encode()
-
         if not verify_signature(
             public_key_hex=x_client_public_key,
             message=message,
@@ -87,14 +87,55 @@ async def login(
         ):
             raise HTTPException(status_code=401, detail="Invalid client signature")
 
-        # 3️⃣ Derive client_id (SERVER-TRUSTED)
         client_id = derive_client_id(bytes.fromhex(x_client_public_key))
 
-        # 4️⃣ Login (PASS PUBLIC KEY ✅)
         return await login_user(
             data=data,
             client_id=client_id,
-            public_key=x_client_public_key,   # 🔥 THIS WAS MISSING
+            public_key=x_client_public_key,
+            platform=x_platform,
+            app_id=x_app_id,
+            app_name=x_app_name,
+            app_version=x_app_version,
+            ip_address=request.client.host
+        )
+
+    except AuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+# ---------- LOGIN WITH GOOGLE ----------
+@router.post("/login/google")
+async def login_google(
+    data: GoogleLoginReq,
+    request: Request,
+    x_client_public_key: str = Header(...),
+    x_client_signature: str = Header(...),
+    x_client_timestamp: str = Header(...),
+    x_platform: str = Header(...),
+    x_app_id: str = Header(...),
+    x_app_name: str = Header(...),
+    x_app_version: str = Header(...)
+):
+    try:
+        now = time.time()
+        if abs(now - float(x_client_timestamp)) > 60:
+            raise HTTPException(status_code=401, detail="Stale login request")
+
+        message = f"{x_client_timestamp}:{data.google_token}".encode()
+        if not verify_signature(
+            public_key_hex=x_client_public_key,
+            message=message,
+            signature_hex=x_client_signature
+        ):
+            raise HTTPException(status_code=401, detail="Invalid client signature")
+
+        client_id = derive_client_id(bytes.fromhex(x_client_public_key))
+
+        return await login_google_user(
+            google_token=data.google_token,
+            client_id=client_id,
+            public_key=x_client_public_key,
             platform=x_platform,
             app_id=x_app_id,
             app_name=x_app_name,
@@ -111,66 +152,38 @@ async def login(
 async def refresh_token(
     refresh_token: str,
     request: Request,
-
-    # 🔐 CRYPTO CLIENT IDENTITY
     x_client_public_key: str = Header(...),
     x_client_signature: str = Header(...),
     x_client_timestamp: str = Header(...)
 ):
-    # 1️⃣ Reject stale / replayed requests (60s window)
     now = time.time()
     if abs(now - float(x_client_timestamp)) > 60:
-        raise HTTPException(
-            status_code=401,
-            detail="Stale refresh request"
-        )
+        raise HTTPException(status_code=401, detail="Stale refresh request")
 
-    # 2️⃣ Verify client signature
     message = f"{x_client_timestamp}:{refresh_token}".encode()
-
     if not verify_signature(
         public_key_hex=x_client_public_key,
         message=message,
         signature_hex=x_client_signature
     ):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid client signature"
-        )
+        raise HTTPException(status_code=401, detail="Invalid client signature")
 
-    # 3️⃣ Derive client_id (SERVER-TRUSTED)
     client_id = derive_client_id(bytes.fromhex(x_client_public_key))
 
-    # 4️⃣ Issue new access token (client-bound)
     token = await refresh_access_token(
         refresh_token=refresh_token,
         client_id=client_id
     )
 
     if not token:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid refresh token"
-        )
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     return {
         "access_token": token,
         "token_type": "bearer"
     }
 
-# Add this model with the other models at the top
-class VerifyRegistrationReq(BaseModel):
-    email: EmailStr
-    otp: str
 
-
-# Add this new endpoint after the /register endpoint
-@router.post("/verify-registration")
-async def verify_registration(data: VerifyRegistrationReq):
-    try:
-        return await verify_registration_otp(data.email, data.otp)
-    except AuthError as e:
-        raise HTTPException(status_code=400, detail=str(e))
 # ---------- FORGOT PASSWORD ----------
 @router.post("/forgot-password")
 async def forgot_password(data: ForgotPasswordReq):

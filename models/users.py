@@ -14,7 +14,8 @@ class UserDB(BaseModel):
     user_id: str
     username: str
     email: EmailStr
-    sidhi_id:str
+    sidhi_id: str
     password_hash: str
     created_at: datetime
     is_active: bool
+    auth_provider: str  # "email" | "google"

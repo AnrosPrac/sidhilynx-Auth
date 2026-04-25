@@ -15,6 +15,10 @@ from models.users import UserRegister, UserLogin
 from ustils.security import hash_password, verify_password
 from ustils.id_generator import generate_user_id
 from services.token_service import issue_tokens
+import os
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+import random
 
 
 class AuthError(Exception):
@@ -70,7 +74,8 @@ async def register_user(data: UserRegister):
         "email": data.email,
         "password_hash": hash_password(data.password),
         "created_at": datetime.utcnow(),
-        "is_active": True
+        "is_active": True,
+        "auth_provider": "email"
     }
 
     await set_registration_otp(
@@ -178,4 +183,93 @@ async def login_user(
     return {
         **tokens,
         "sidhi_id": user["sidhi_id"]
+    }
+
+# =========================
+# LOGIN WITH GOOGLE (CLIENT-AWARE)
+# =========================
+async def login_google_user(
+    google_token: str,
+    client_id: str,
+    public_key: str,
+    platform: str,
+    app_id: str,
+    app_name: str,
+    app_version: str,
+    ip_address: str
+):
+    try:
+        # 1️⃣ Verify Google Token
+        client_id_google = os.getenv("GOOGLE_CLIENT_ID")
+        idinfo = id_token.verify_oauth2_token(
+            google_token, google_requests.Request(), client_id_google
+        )
+        
+        email = idinfo["email"]
+        name = idinfo.get("name", email.split("@")[0])
+        
+        # 2️⃣ Check if user exists by email
+        user = await get_user_by_email(email)
+        is_new_user = not user
+
+        if not user:
+            # Auto-register if not found
+            clean_username = normalize_username(name)
+            sidhi_id = f"{clean_username}@sidhilynx.id"
+            spaceless_username = normalize_username_without_spaces(name)
+            
+            # Handle sidhi_id collision
+            if await get_user_by_sidhi_id(sidhi_id):
+                sidhi_id = f"{clean_username}{random.randint(100,999)}@sidhilynx.id"
+                
+            user_data = {
+                "user_id": generate_user_id(),
+                "sidhi_id": sidhi_id,
+                "username": spaceless_username,
+                "email": email,
+                "password_hash": hash_password(generate_user_id()), # Dummy password, can't login via email/pwd unless reset
+                "created_at": datetime.utcnow(),
+                "is_active": True,
+                "auth_provider": "google"
+            }
+            await create_user(user_data)
+            user = user_data
+            
+    except ValueError:
+        raise AuthError("Invalid Google token")
+
+    # 3️⃣ Client registry enforcement
+    client = await get_client_by_id(client_id)
+
+    if not client:
+        await create_client(
+            client_id=client_id,
+            user_id=user["user_id"],
+            public_key=public_key,
+            platform=platform,
+            app_id=app_id,
+            app_name=app_name,
+            app_version=app_version,
+            ip_address=ip_address
+        )
+    else:
+        if client["user_id"] != user["user_id"]:
+            raise AuthError("This device is already linked to another account")
+
+        if client["status"] != "active":
+            raise AuthError("This device has been revoked")
+
+        await update_client_activity(client_id, ip_address)
+
+    # 4️⃣ Issue client-bound tokens
+    tokens = await issue_tokens(
+        user_id=user["user_id"],
+        client_id=client_id,
+        scopes=["sidhilynx"]
+    )
+
+    return {
+        **tokens,
+        "sidhi_id": user["sidhi_id"],
+        "is_new_user": is_new_user
     }
