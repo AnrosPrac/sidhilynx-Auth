@@ -76,3 +76,22 @@ async def clear_reset_otp(user_id: str):
             }
         }
     )
+
+
+async def record_login(user_id: str, ip_address: str, location: dict):
+    await db.users.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "last_login_ip": ip_address,
+                "last_login_location": location,
+                "last_login_at": datetime.utcnow()
+            },
+            "$push": {
+                "login_history": {
+                    "$each": [{"ip": ip_address, "location": location, "at": datetime.utcnow()}],
+                    "$slice": -20
+                }
+            }
+        }
+    )

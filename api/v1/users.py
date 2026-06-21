@@ -7,6 +7,7 @@ from services.auth_services import register_user, verify_registration_otp, login
 from services.password_reset import request_password_reset, reset_password, PasswordResetError
 from services.token_service import refresh_access_token
 from security.client_crypto import derive_client_id, verify_signature
+from rate_limit import limiter
 
 router = APIRouter()
 
@@ -39,22 +40,25 @@ class ResetPasswordReq(BaseModel):
 
 # ---------- REGISTER ----------
 @router.post("/register")
+@limiter.limit("5/minute")
 async def register(
     data: RegisterReq,
+    request: Request,
     x_register_key: str = Header(...)
 ):
     if x_register_key != os.getenv("REGISTER_API_KEY"):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
-        return await register_user(data)
+        return await register_user(data, ip_address=request.client.host)
     except AuthError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 # ---------- VERIFY REGISTRATION OTP ----------
 @router.post("/verify-registration")
-async def verify_registration(data: VerifyRegistrationReq):
+@limiter.limit("10/minute")
+async def verify_registration(data: VerifyRegistrationReq, request: Request):
     try:
         return await verify_registration_otp(data.email, data.otp)
     except AuthError as e:
@@ -63,6 +67,7 @@ async def verify_registration(data: VerifyRegistrationReq):
 
 # ---------- LOGIN ----------
 @router.post("/login")
+@limiter.limit("10/minute")
 async def login(
     data: LoginReq,
     request: Request,
@@ -106,6 +111,7 @@ async def login(
 
 # ---------- LOGIN WITH GOOGLE ----------
 @router.post("/login/google")
+@limiter.limit("10/minute")
 async def login_google(
     data: GoogleLoginReq,
     request: Request,
@@ -149,6 +155,7 @@ async def login_google(
 
 # ---------- REFRESH TOKEN ----------
 @router.post("/refresh-token")
+@limiter.limit("20/minute")
 async def refresh_token(
     refresh_token: str,
     request: Request,
@@ -186,14 +193,16 @@ async def refresh_token(
 
 # ---------- FORGOT PASSWORD ----------
 @router.post("/forgot-password")
-async def forgot_password(data: ForgotPasswordReq):
+@limiter.limit("5/minute")
+async def forgot_password(data: ForgotPasswordReq, request: Request):
     await request_password_reset(data.identifier)
     return {"message": "If the email exists, an OTP has been sent."}
 
 
 # ---------- RESET PASSWORD ----------
 @router.post("/reset-password")
-async def reset_password_api(data: ResetPasswordReq):
+@limiter.limit("10/minute")
+async def reset_password_api(data: ResetPasswordReq, request: Request):
     try:
         await reset_password(data.identifier, data.otp, data.new_password)
         return {"message": "Password reset successful"}

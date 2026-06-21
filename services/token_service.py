@@ -65,7 +65,7 @@ async def refresh_access_token(
     if record["client_id"] != client_id:
         return None
 
-    if not await is_client_active(client_id):
+    if not await is_client_active(client_id, record["user_id"]):
         return None
 
 

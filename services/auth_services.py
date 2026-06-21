@@ -4,10 +4,11 @@ import re
 from db.user_repo import (
     get_user_by_email,
     get_user_by_sidhi_id,
-    create_user
+    create_user,
+    record_login
 )
 from db.client_repo import (
-    get_client_by_id,
+    get_client_link,
     create_client,
     update_client_activity
 )
@@ -47,10 +48,15 @@ def normalize_username_without_spaces(name: str) -> str:
 from services.email_services import send_registration_otp
 from db.user_repo import set_registration_otp, get_pending_registration, increment_registration_otp_attempts, delete_pending_registration
 from ustils.otp import generate_otp, hash_otp, otp_expiry_time, MAX_OTP_ATTEMPTS
+from ustils.disposable_email import is_disposable_email
+from ustils.geo import lookup_location
 import asyncio
 
-async def register_user(data: UserRegister):
+async def register_user(data: UserRegister, ip_address: str = None):
     """Step 1: Generate OTP and send email (don't create user yet)"""
+    if is_disposable_email(data.email):
+        raise AuthError("Temporary or disposable email addresses are not allowed")
+
     clean_username = normalize_username(data.username)
     sidhi_id = f"{clean_username}@sidhilynx.id"
     spaceless_username = normalize_username_without_spaces(data.username)
@@ -75,7 +81,9 @@ async def register_user(data: UserRegister):
         "password_hash": hash_password(data.password),
         "created_at": datetime.utcnow(),
         "is_active": True,
-        "auth_provider": "email"
+        "auth_provider": "email",
+        "registration_ip": ip_address,
+        "registration_location": lookup_location(ip_address) if ip_address else None
     }
 
     await set_registration_otp(
@@ -148,11 +156,11 @@ async def login_user(
     if not verify_password(data.password, user["password_hash"]):
         raise AuthError("Invalid credentials")
 
-    # 2️⃣ Client registry enforcement
-    client = await get_client_by_id(client_id)
+    # 2️⃣ Client registry (recorded for fraud monitoring, never blocks login)
+    client = await get_client_link(client_id, user["user_id"])
 
     if not client:
-        # First time seeing this client → register it
+        # First time seeing this device+account pair → register it
         await create_client(
             client_id=client_id,
             user_id=user["user_id"],
@@ -164,14 +172,12 @@ async def login_user(
             ip_address=ip_address
         )
     else:
-        # Existing client checks
-        if client["user_id"] != user["user_id"]:
-            raise AuthError("This device is already linked to another account")
-
         if client["status"] != "active":
             raise AuthError("This device has been revoked")
 
-        await update_client_activity(client_id, ip_address)
+        await update_client_activity(client_id, ip_address, user_id=user["user_id"])
+
+    await record_login(user["user_id"], ip_address, lookup_location(ip_address))
 
     # 3️⃣ Issue client-bound tokens
     tokens = await issue_tokens(
@@ -213,6 +219,9 @@ async def login_google_user(
         is_new_user = not user
 
         if not user:
+            if is_disposable_email(email):
+                raise AuthError("Temporary or disposable email addresses are not allowed")
+
             # Auto-register if not found
             clean_username = normalize_username(name)
             sidhi_id = f"{clean_username}@sidhilynx.id"
@@ -238,8 +247,8 @@ async def login_google_user(
     except ValueError as e:
         raise AuthError(f"Invalid Google token: {str(e)}")
 
-    # 3️⃣ Client registry enforcement
-    client = await get_client_by_id(client_id)
+    # 3️⃣ Client registry (recorded for fraud monitoring, never blocks login)
+    client = await get_client_link(client_id, user["user_id"])
 
     if not client:
         await create_client(
@@ -253,13 +262,12 @@ async def login_google_user(
             ip_address=ip_address
         )
     else:
-        if client["user_id"] != user["user_id"]:
-            raise AuthError("This device is already linked to another account")
-
         if client["status"] != "active":
             raise AuthError("This device has been revoked")
 
-        await update_client_activity(client_id, ip_address)
+        await update_client_activity(client_id, ip_address, user_id=user["user_id"])
+
+    await record_login(user["user_id"], ip_address, lookup_location(ip_address))
 
     # 4️⃣ Issue client-bound tokens
     tokens = await issue_tokens(

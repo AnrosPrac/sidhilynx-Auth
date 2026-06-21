@@ -25,7 +25,7 @@ async def list_clients(x_admin_key: str = Header(...)):
 async def revoke(client_id: str, x_admin_key: str = Header(...)):
     verify_admin(x_admin_key)
 
-    await db.clients.update_one(
+    await db.clients.update_many(
         {"client_id": client_id},
         {"$set": {"status": "revoked"}}
     )

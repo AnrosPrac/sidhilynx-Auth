@@ -9,3 +9,5 @@ sib-api-v3-sdk
 pynacl
 google-auth
 requests
+slowapi
+geoip2fast
