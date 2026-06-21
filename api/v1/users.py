@@ -8,6 +8,7 @@ from services.password_reset import request_password_reset, reset_password, Pass
 from services.token_service import refresh_access_token
 from security.client_crypto import derive_client_id, verify_signature
 from rate_limit import limiter
+from ustils.client_ip import get_client_ip
 
 router = APIRouter()
 
@@ -50,7 +51,7 @@ async def register(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
-        return await register_user(data, ip_address=request.client.host)
+        return await register_user(data, ip_address=get_client_ip(request))
     except AuthError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -102,7 +103,7 @@ async def login(
             app_id=x_app_id,
             app_name=x_app_name,
             app_version=x_app_version,
-            ip_address=request.client.host
+            ip_address=get_client_ip(request)
         )
 
     except AuthError as e:
@@ -146,7 +147,7 @@ async def login_google(
             app_id=x_app_id,
             app_name=x_app_name,
             app_version=x_app_version,
-            ip_address=request.client.host
+            ip_address=get_client_ip(request)
         )
 
     except AuthError as e:
